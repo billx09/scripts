@@ -66,26 +66,26 @@ check_pidfiles() {
   done
 }
 loop_over_single_argument() {
-  echo "loop_over_single_argument $@"
+  #echo "loop_over_single_argument $@"
   local _argnb=$1
   shift
   local _command=$@
   if [ "${_argnb}" -eq "${#ARGUMENTS[@]}" ]; then
     ## We can loop over the tries
-    echo "Not implemented..."
-    for TRY in $TRY_LIST; do
+    for (( TRY=0; TRY<$NB_TRY_FOR_EACH_ARG; TRY++)); do
       pidfile=$(check_pidfiles)
       launch_atomic_test "${pidfile}" "${TRY}" "${EXECUTABLE}" ${_command} &
+      echo $! > ${pidfile}
+
       ## Sleeping is required if you use srand(time(NULL)) to
       # change the seed. We ensure that the number of second 
       # is different for each run.
       sleep 1
-      echo $! > ${pidfile}
     done
   else
     ## We loop over argument values
     for a in ${!ARGUMENTS[$_argnb]}; do
-      loop_over_single_argument `expr ${_argnb} + 1` ${_COMMAND} $a
+      loop_over_single_argument `expr ${_argnb} + 1` ${_command} $a
     done
   fi
 }
@@ -96,7 +96,7 @@ declare -a HELP_REQUIRED_VARIABLE=(\
   [1]="# Name of the variables containing the arguments to pass to the executable,
 # separeted with a space.
 # Each variable declared in ARGUMENTS must then be defined.
-# ARGUMENTS=\"ARG1 ARG2\"
+# ARGUMENTS=(\"ARG1\" \"ARG2\")
 # ARG1=\"1 2 3 4\"
 # ARG2=\"5 6 7 8\""\
   [2]="# TIMEOUT is in second and must be left empty for no timeout"
@@ -125,9 +125,6 @@ while [[ $# -ge 1 ]]; do
       CONFIGSCRIPT="$1"
       if [ -r "$CONFIGSCRIPT" ]; then
         source $CONFIGSCRIPT
-      else
-        echo "Cannot access configuration script file $CONFIGSCRIPT"
-        exit 1
       fi
       shift
       ;;
@@ -147,7 +144,6 @@ if [ ! -r "$CONFIGSCRIPT" ]; then
 fi
 
 [ -x $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
-TRY_LIST=`seq 1 $NB_TRY_FOR_EACH_ARG`
 
 mkdir -p ${OUTPUT_DIRECTORY}
 mkdir -p ${PID_DIR}
