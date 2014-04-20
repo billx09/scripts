@@ -10,7 +10,7 @@ show_help() {
   echo " -c|--configscript <file>"
 }
 generate_configscript() {
-  exec 1> configscript
+  exec 1> $CONFIGSCRIPT
   echo "##### REQUIRED VARIABLE #####"
   i=0
   for var in $REQUIRED_VARIABLE; do
@@ -27,21 +27,24 @@ generate_configscript() {
 timestamp() {
   echo `date +"%m/%d %H:%M:%S"`
 }
+post_atomic_test() {
+  echo -n ""
+}
 launch_atomic_test(){
   local _pidfile=$1
   local _try=$2
-  shift 2
-  local _COMMAND=""
-  local _outfile="${OUTPUT_DIRECTORY}/out_"
-  local _errfile="${OUTPUT_DIRECTORY}/err_"
+  local _COMMAND=$3
+  shift 3
+  local _outfile="${OUTPUT_DIRECTORY}/out"
+  local _errfile="${OUTPUT_DIRECTORY}/err"
   for i; do
-    _COMMAND="${_COMMAND} $1"
-    _outfile="${outfile}_$1"
-    _errfile="${errfile}_$1"
+    _COMMAND="${_COMMAND} $i"
+    _outfile="${_outfile}_$i"
+    _errfile="${_errfile}_$i"
     shift
   done
-  _outfile="${outfile}_${_try}"
-  _errfile="${errfile}_${_try}"
+  _outfile="${_outfile}_${_try}"
+  _errfile="${_errfile}_${_try}"
   echo "$(timestamp) Command start (${_try}): ${_COMMAND}"
   ${_COMMAND} > ${_outfile} 2> ${_errfile} &
   local _app_pid=$!
@@ -53,7 +56,7 @@ launch_atomic_test(){
 }
 check_pidfiles() {
   while [ 1 ]; do
-    for ((I_PROC=0; I_PROC<${NB_PROCESS}; I_PROC++)); do
+    for (( I_PROC=0; I_PROC<${NB_THREAD}; I_PROC++)); do
       if [ ! -f ${PID_DIR}/proc${I_PROC}.pid ]; then
         echo "${PID_DIR}/proc${I_PROC}.pid"
         return;
@@ -63,15 +66,16 @@ check_pidfiles() {
   done
 }
 loop_over_single_argument() {
+  echo "loop_over_single_argument $@"
   local _argnb=$1
   shift
   local _command=$@
   if [ "${_argnb}" -eq "${#ARGUMENTS[@]}" ]; then
     ## We can loop over the tries
     echo "Not implemented..."
-    for TRY in ${TRY_LIST}; do
+    for TRY in $TRY_LIST; do
       pidfile=$(check_pidfiles)
-      launch_atomic_test "${pidfile}" "${EXEC}" "${PROBLEM}" "${TIMEOUT}" "${CFGNB}" "${P_NHtoH}" "${P_HtoNH}" "${TRY}" &
+      launch_atomic_test "${pidfile}" "${TRY}" "${EXECUTABLE}" ${_command} &
       ## Sleeping is required if you use srand(time(NULL)) to
       # change the seed. We ensure that the number of second 
       # is different for each run.
@@ -79,8 +83,8 @@ loop_over_single_argument() {
       echo $! > ${pidfile}
     done
   else
-    ## We loop over next arguments
-    for a in ${!ARGUMENTS[1]}; do
+    ## We loop over argument values
+    for a in ${!ARGUMENTS[$_argnb]}; do
       loop_over_single_argument `expr ${_argnb} + 1` ${_COMMAND} $a
     done
   fi
@@ -107,6 +111,7 @@ PID_DIR="/var/run/$MY_NAME"
 NB_TRY_FOR_EACH_ARG=1
 TIMEOUT="" # seconds
 NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
+CONFIGSCRIPT="./configscript"
 
 #########################
 # Parse arguments
@@ -136,10 +141,13 @@ while [[ $# -ge 1 ]]; do
       ;;
   esac
 done
-echo "Argument parsed"
-exit 0
-[ -d $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
-[ -d $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
+if [ ! -r "$CONFIGSCRIPT" ]; then
+  echo "Cannot access configuration script file $CONFIGSCRIPT"
+  exit 1
+fi
+
+[ -x $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
+TRY_LIST=`seq 1 $NB_TRY_FOR_EACH_ARG`
 
 mkdir -p ${OUTPUT_DIRECTORY}
 mkdir -p ${PID_DIR}
