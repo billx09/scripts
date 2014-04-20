@@ -1,57 +1,56 @@
 #!/bin/bash
 
-EXEC_DIR=${DEVEL_DIR}/src/hpp-constraintgraph-planner/build/tests
-LOG_DIR=${DEVEL_DIR}/install/var/log/hpp
-
-BOOST_TEST_LOG_LEVEL=all
-EXEC=${EXEC_DIR}/benchmark
-
-OUTPUT_DIR=~/devel/benchmark/log
-PID_DIR=~/devel/benchmark/pid
-
-TIMESTAMP='date +"%m/%d %H:%M:%S"'
-
-TIMEOUT=3600 # seconds
-
-NB_PROCESS=6
-NB_TRY_PER_P=18
-TRY_LIST=`seq 18 ${NB_TRY_PER_P}`
-#SEQ_P_HtoNH="128 256 384 512 640 768 896"
-#SEQ_P_NHtoH="128 256 384 512 640 768 896"
-#SEQ_P_HtoNH="896 768 640 512 384 256 128"
-#SEQ_P_NHtoH="896 768 640 512 384 256 128"
-SEQ_P_HtoNH="640"
-SEQ_P_NHtoH="384"
-
-CFGNB=2
-
-PROBLEM="door"
-
-export BOOST_TEST_LOG_LEVEL
-mkdir -p ${OUTPUT_DIR}
-mkdir -p ${PID_DIR}
-
-launch_atomic_test(){
-  local __pidfile=$1
-  local execfile=$2
-  local problem=$3
-  local timeout=$4
-  local cfgnb=$5
-  local p_nhtoh=$6
-  local p_htonh=$7
-  local try=$8
-  local COMMAND="${execfile} ${problem} ${timeout} ${cfgnb} ${p_nhtoh} ${p_htonh}"
-  echo "$(eval ${TIMESTAMP}) Command start: ${COMMAND}"
-  ${COMMAND} > ${OUTPUT_DIR}/out.${problem}.${timeout}.${cfgnb}.${p_nhtoh}.${p_htonh}.${try} \
-    2> ${OUTPUT_DIR}/err.${problem}.${timeout}.${cfgnb}.${p_nhtoh}.${p_htonh}.${try} &
-  local APP_PID=$!
-  wait ${APP_PID}
-  mv ${LOG_DIR}/journal.${APP_PID}.log ${OUTPUT_DIR}/journal.${problem}.${timeout}.${cfgnb}.${p_nhtoh}.${p_htonh}.${try}
-  mv ${LOG_DIR}/benchmark.${APP_PID}.log ${OUTPUT_DIR}/benchmark.${problem}.${timeout}.${cfgnb}.${p_nhtoh}.${p_htonh}.${try}
-  echo "Command done : ${COMMAND}"
-  rm -f ${__pidfile}
+#########################
+# Define some functions #
+#########################
+MY_NAME=`basename $0`
+echoerr() { echo "$@" 1>&2; }
+show_help() {
+  echo "Usage: $MY_NAME [options]"
+  echo " -c|--configscript <file>"
 }
-
+generate_configscript() {
+  exec 1> configscript
+  echo "##### REQUIRED VARIABLE #####"
+  i=0
+  for var in $REQUIRED_VARIABLE; do
+    echo -e "${HELP_REQUIRED_VARIABLE[$i]}"
+    echo "$var=\"${!var}\""
+    i=`expr $i+1`
+  done
+  echo
+  echo "##### OPTIONAL VARIABLE #####"
+  for var in $OPTIONAL_VARIABLE; do
+    echo "# $var=\"${!var}\""
+  done
+}
+timestamp() {
+  echo `date +"%m/%d %H:%M:%S"`
+}
+launch_atomic_test(){
+  local _pidfile=$1
+  local _try=$2
+  shift 2
+  local _COMMAND=""
+  local _outfile="${OUTPUT_DIRECTORY}/out_"
+  local _errfile="${OUTPUT_DIRECTORY}/err_"
+  for i; do
+    _COMMAND="${_COMMAND} $1"
+    _outfile="${outfile}_$1"
+    _errfile="${errfile}_$1"
+    shift
+  done
+  _outfile="${outfile}_${_try}"
+  _errfile="${errfile}_${_try}"
+  echo "$(timestamp) Command start (${_try}): ${_COMMAND}"
+  ${_COMMAND} > ${_outfile} 2> ${_errfile} &
+  local _app_pid=$!
+  wait ${_app_pid}
+  ## Call user defined function if needed
+  post_atomic_test ${_app_pid} ${_try} ${_COMMAND} 
+  echo "Command done (${_try}): ${_COMMAND}"
+  rm -f ${_pidfile}
+}
 check_pidfiles() {
   while [ 1 ]; do
     for ((I_PROC=0; I_PROC<${NB_PROCESS}; I_PROC++)); do
@@ -63,11 +62,13 @@ check_pidfiles() {
     sleep 5
   done
 }
-
-echo "Main script PID is $$"
-
-for P_HtoNH in ${SEQ_P_HtoNH}; do
-  for P_NHtoH in ${SEQ_P_NHtoH}; do
+loop_over_single_argument() {
+  local _argnb=$1
+  shift
+  local _command=$@
+  if [ "${_argnb}" -eq "${#ARGUMENTS[@]}" ]; then
+    ## We can loop over the tries
+    echo "Not implemented..."
     for TRY in ${TRY_LIST}; do
       pidfile=$(check_pidfiles)
       launch_atomic_test "${pidfile}" "${EXEC}" "${PROBLEM}" "${TIMEOUT}" "${CFGNB}" "${P_NHtoH}" "${P_HtoNH}" "${TRY}" &
@@ -77,7 +78,74 @@ for P_HtoNH in ${SEQ_P_HtoNH}; do
       sleep 1
       echo $! > ${pidfile}
     done
-  done
+  else
+    ## We loop over next arguments
+    for a in ${!ARGUMENTS[1]}; do
+      loop_over_single_argument `expr ${_argnb} + 1` ${_COMMAND} $a
+    done
+  fi
+}
+
+REQUIRED_VARIABLE="EXECUTABLE ARGUMENTS TIMEOUT"
+declare -a HELP_REQUIRED_VARIABLE=(\
+  [0]="# Path to executable"\
+  [1]="# Name of the variables containing the arguments to pass to the executable,
+# separeted with a space.
+# Each variable declared in ARGUMENTS must then be defined.
+# ARGUMENTS=\"ARG1 ARG2\"
+# ARG1=\"1 2 3 4\"
+# ARG2=\"5 6 7 8\""\
+  [2]="# TIMEOUT is in second and must be left empty for no timeout"
+  )
+OPTIONAL_VARIABLE="OUTPUT_DIRECTORY PID_DIR NB_TRY_FOR_EACH_ARG NB_THREAD"
+
+######################
+# Default values
+######################
+OUTPUT_DIRECTORY="./output/"
+PID_DIR="/var/run/$MY_NAME"
+NB_TRY_FOR_EACH_ARG=1
+TIMEOUT="" # seconds
+NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
+
+#########################
+# Parse arguments
+#########################
+while [[ $# -ge 1 ]]; do
+  key="$1"
+  shift
+
+  case $key in
+    -c|--configscript)
+      CONFIGSCRIPT="$1"
+      if [ -r "$CONFIGSCRIPT" ]; then
+        source $CONFIGSCRIPT
+      else
+        echo "Cannot access configuration script file $CONFIGSCRIPT"
+        exit 1
+      fi
+      shift
+      ;;
+    -g|--generate-configscript)
+      generate_configscript
+      exit 0
+      ;;
+    *)
+      # unknown option
+      echoerr "Unknown option $key"
+      ;;
+  esac
 done
+echo "Argument parsed"
+exit 0
+[ -d $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
+[ -d $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
+
+mkdir -p ${OUTPUT_DIRECTORY}
+mkdir -p ${PID_DIR}
+
+echo "Main script PID is $$"
+
+loop_over_single_argument 0
 
 wait
