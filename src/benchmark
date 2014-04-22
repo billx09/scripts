@@ -11,7 +11,10 @@ show_help() {
                               With -g option, blank configuration will be written to <file>.
  -g|--generate-configscript   Write a blank configuration to config file with more detailed help.
                               Use -c to specify the file.
- -h|--help                    Show this help message."
+ -h|--help                    Show this help message.
+ -p-gtk|--progress-gtk        Show graphic progress bar.
+ -p|--progress                Show CLI progress bar (Not implemented yet).
+ -t|--pstree                  Show current launched process."
 }
 generate_configscript() {
   exec 1> $CONFIGSCRIPT
@@ -27,6 +30,51 @@ generate_configscript() {
   for var in $OPTIONAL_VARIABLE; do
     echo "# $var=\"${!var}\""
   done
+}
+progress() {
+  case $1 in
+    pstree)
+      $TERM -e "watch pstree -a $$" &
+      ;;
+    bar-gtk)
+      FIFO_PROGRESSBAR="/tmp/benchmark-pb"
+      mkfifo ${FIFO_PROGRESSBAR}
+      ( (while [ -r ${FIFO_PROGRESSBAR} ]; do \
+          if read line <${FIFO_PROGRESSBAR}; then \
+            if [[ "$line" == 'quit' ]]; then
+              break
+            fi
+            echo $line;\
+          fi\
+        done;\
+        rm ${FIFO_PROGRESSBAR} ) | \
+        ( zenity --progress --title "Benchmark" --percentage=0 --auto-kill --text "Running..."; echo "quit" > ${FIFO_PROGRESSBAR}) ) &
+      PROGRESS_MAX=`progress_compute_length`
+      PROGRESS_CURRENT=0
+      ;;
+    bar)
+      echo "CLI progress bar : Not implemented yet..."
+      ;;
+  esac
+}
+progress_compute_length() {
+  local _length=1
+  local _argl=0
+  for arg in ${ARGUMENTS[*]}; do
+    _argl=0
+    for i in ${!arg}; do
+      _argl=`expr $_argl + 1`
+    done
+    _length=`expr $_length '*' ${_argl}`
+  done
+  _length=`expr $_length '*' ${NB_TRY_FOR_EACH_ARG}`
+  echo $_length
+}
+update_progress() {
+  PROGRESS_CURRENT=`expr $PROGRESS_CURRENT + 1`
+  if [ -w "${FIFO_PROGRESSBAR}" ]; then
+    echo `expr ${PROGRESS_CURRENT} '*' 100 '/' ${PROGRESS_MAX} ` >> ${FIFO_PROGRESSBAR}
+  fi
 }
 timestamp() {
   echo `date +"%m/%d %H:%M:%S"`
@@ -80,6 +128,7 @@ loop_over_single_argument() {
       pidfile=$(check_pidfiles)
       launch_atomic_test "${pidfile}" "${TRY}" "${EXECUTABLE}" ${_command} &
       echo $! > ${pidfile}
+      update_progress
 
       ## Sleeping is required if you use srand(time(NULL)) to
       # change the seed. We ensure that the number of second 
@@ -105,7 +154,7 @@ declare -a HELP_REQUIRED_VARIABLE=(\
 # ARG2=\"5 6 7 8\""\
   [2]="# TIMEOUT is in second and must be left empty for no timeout"
   )
-OPTIONAL_VARIABLE="OUTPUT_DIRECTORY PID_DIR NB_TRY_FOR_EACH_ARG NB_THREAD"
+OPTIONAL_VARIABLE="OUTPUT_DIRECTORY PID_DIR NB_TRY_FOR_EACH_ARG NB_THREAD PROGRESS_TYPE"
 
 ######################
 # Default values
@@ -116,7 +165,7 @@ NB_TRY_FOR_EACH_ARG=1
 TIMEOUT="" # seconds
 NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
 CONFIGSCRIPT="./configscript"
-GENERATE_CONFIGSCRIPT=false
+GENERATE_CONFIGSCRIPT=0
 
 #########################
 # Parse arguments
@@ -136,6 +185,14 @@ while [[ $# -ge 1 ]]; do
     -g|--generate-configscript)
       GENERATE_CONFIGSCRIPT=1
       ;;
+    -p-gtk|--progress-gtk)
+      PROGRESS_TYPE="bar-gtk"
+      ;;
+    -p|--progress)
+      PROGRESS_TYPE="bar"
+      ;;
+    -t|--pstree)
+      PROGRESS_TYPE="pstree"
       ;;
     -h|--help)
       show_help
@@ -157,6 +214,8 @@ if [ ! -r "$CONFIGSCRIPT" ]; then
 fi
 
 [ -x $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
+
+[ ! -z $PROGRESS_TYPE ] && progress "$PROGRESS_TYPE"
 
 mkdir -p ${OUTPUT_DIRECTORY}
 mkdir -p ${PID_DIR}
