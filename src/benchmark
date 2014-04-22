@@ -6,8 +6,12 @@
 MY_NAME=`basename $0`
 echoerr() { echo "$@" 1>&2; }
 show_help() {
-  echo "Usage: $MY_NAME [options]"
-  echo " -c|--configscript <file>"
+  echo "Usage: $MY_NAME [options]
+ -c|--configscript <file>     Use <file> as the configuration file. Default is ./configscript
+                              With -g option, blank configuration will be written to <file>.
+ -g|--generate-configscript   Write a blank configuration to config file with more detailed help.
+                              Use -c to specify the file BEFORE.
+ -h|--help                    Show this help message."
 }
 generate_configscript() {
   exec 1> $CONFIGSCRIPT
@@ -132,6 +136,10 @@ while [[ $# -ge 1 ]]; do
       generate_configscript
       exit 0
       ;;
+    -h|--help)
+      show_help
+      exit 0
+      ;;
     *)
       # unknown option
       echoerr "Unknown option $key"
@@ -140,6 +148,7 @@ while [[ $# -ge 1 ]]; do
 done
 if [ ! -r "$CONFIGSCRIPT" ]; then
   echo "Cannot access configuration script file $CONFIGSCRIPT"
+  show_help
   exit 1
 fi
 
