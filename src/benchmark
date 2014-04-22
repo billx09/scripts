@@ -10,7 +10,7 @@ show_help() {
  -c|--configscript <file>     Use <file> as the configuration file. Default is ./configscript
                               With -g option, blank configuration will be written to <file>.
  -g|--generate-configscript   Write a blank configuration to config file with more detailed help.
-                              Use -c to specify the file BEFORE.
+                              Use -c to specify the file.
  -h|--help                    Show this help message."
 }
 generate_configscript() {
@@ -116,6 +116,7 @@ NB_TRY_FOR_EACH_ARG=1
 TIMEOUT="" # seconds
 NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
 CONFIGSCRIPT="./configscript"
+GENERATE_CONFIGSCRIPT=false
 
 #########################
 # Parse arguments
@@ -133,8 +134,8 @@ while [[ $# -ge 1 ]]; do
       shift
       ;;
     -g|--generate-configscript)
-      generate_configscript
-      exit 0
+      GENERATE_CONFIGSCRIPT=1
+      ;;
       ;;
     -h|--help)
       show_help
@@ -146,8 +147,11 @@ while [[ $# -ge 1 ]]; do
       ;;
   esac
 done
+
+[ ! $GENERATE_CONFIGSCRIPT -eq 0 ] && generate_configscript && exit 0
+
 if [ ! -r "$CONFIGSCRIPT" ]; then
-  echo "Cannot access configuration script file $CONFIGSCRIPT"
+  echoerr "Cannot access configuration script file $CONFIGSCRIPT"
   show_help
   exit 1
 fi
