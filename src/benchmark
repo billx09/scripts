@@ -175,13 +175,13 @@ while [[ $# -ge 1 ]]; do
       GENERATE_CONFIGSCRIPT=1
       ;;
     -p-gtk|--progress-gtk)
-      PROGRESS_TYPE="bar-gtk"
+      progress "bar-gtk"
       ;;
     -p|--progress)
-      PROGRESS_TYPE="bar"
+      progress "gtk"
       ;;
     -t|--pstree)
-      PROGRESS_TYPE="pstree"
+      progress "pstree"
       ;;
     -h|--help)
       show_help
@@ -203,8 +203,6 @@ if [ ! -r "$CONFIGSCRIPT" ]; then
 fi
 
 [ -x $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
-
-[ ! -z $PROGRESS_TYPE ] && progress "$PROGRESS_TYPE"
 
 mkdir -p ${OUTPUT_DIRECTORY} || exit 1
 mkdir -p ${PID_DIR} || exit 1
