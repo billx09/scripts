@@ -37,14 +37,14 @@ progress() {
       $TERM -e "watch pstree -a $$" &
       ;;
     bar-gtk)
-      coproc PROGRESSBAR_GTK { zenity --progress --title "Benchmark" --percentage=0 --auto-kill --text "Running..."; }
-      PROGRESS_MAX=`progress_compute_length`
-      PROGRESS_CURRENT=0
+      @PROGRESSBAR_COMMAND@
       ;;
     bar)
       echo "CLI progress bar : Not implemented yet..."
       ;;
   esac
+  PROGRESS_MAX=`progress_compute_length`
+  PROGRESS_CURRENT=0
 }
 progress_compute_length() {
   local _length=1
