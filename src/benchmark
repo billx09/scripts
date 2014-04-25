@@ -37,18 +37,7 @@ progress() {
       $TERM -e "watch pstree -a $$" &
       ;;
     bar-gtk)
-      FIFO_PROGRESSBAR="/tmp/benchmark-pb"
-      mkfifo ${FIFO_PROGRESSBAR}
-      ( (while [ -r ${FIFO_PROGRESSBAR} ]; do \
-          if read line <${FIFO_PROGRESSBAR}; then \
-            if [[ "$line" == 'quit' ]]; then
-              break
-            fi
-            echo $line;\
-          fi\
-        done;\
-        rm ${FIFO_PROGRESSBAR} ) | \
-        ( zenity --progress --title "Benchmark" --percentage=0 --auto-kill --text "Running..."; echo "quit" > ${FIFO_PROGRESSBAR}) ) &
+      coproc PROGRESSBAR_GTK { zenity --progress --title "Benchmark" --percentage=0 --auto-kill --text "Running..."; }
       PROGRESS_MAX=`progress_compute_length`
       PROGRESS_CURRENT=0
       ;;
@@ -72,8 +61,8 @@ progress_compute_length() {
 }
 update_progress() {
   PROGRESS_CURRENT=`expr $PROGRESS_CURRENT + 1`
-  if [ -w "${FIFO_PROGRESSBAR}" ]; then
-    echo `expr ${PROGRESS_CURRENT} '*' 100 '/' ${PROGRESS_MAX} ` >> ${FIFO_PROGRESSBAR}
+  if [ ! -z "${PROGRESSBAR_GTK}" ]; then
+    echo `expr ${PROGRESS_CURRENT} '*' 100 '/' ${PROGRESS_MAX} ` >&${PROGRESSBAR_GTK[1]}
   fi
 }
 timestamp() {
