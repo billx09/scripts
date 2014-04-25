@@ -206,8 +206,8 @@ fi
 
 [ ! -z $PROGRESS_TYPE ] && progress "$PROGRESS_TYPE"
 
-mkdir -p ${OUTPUT_DIRECTORY}
-mkdir -p ${PID_DIR}
+mkdir -p ${OUTPUT_DIRECTORY} || exit 1
+mkdir -p ${PID_DIR} || exit 1
 
 echo "Main script PID is $$"
 
