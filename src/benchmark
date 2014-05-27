@@ -155,6 +155,7 @@ TIMEOUT="" # seconds
 NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
 CONFIGSCRIPT="./configscript"
 GENERATE_CONFIGSCRIPT=0
+PROGRESS_TYPE="pstree bar-gtk"
 
 #########################
 # Parse arguments
@@ -175,13 +176,13 @@ while [[ $# -ge 1 ]]; do
       GENERATE_CONFIGSCRIPT=1
       ;;
     -p-gtk|--progress-gtk)
-      progress "bar-gtk"
+      PROGRESS_TYPE="$PROGRESS_TYPE bar-gtk"
       ;;
     -p|--progress)
-      progress "gtk"
+      PROGRESS_TYPE="$PROGRESS_TYPE gtk"
       ;;
     -t|--pstree)
-      progress "pstree"
+      PROGRESS_TYPE="$PROGRESS_TYPE pstree"
       ;;
     -h|--help)
       show_help
@@ -194,18 +195,24 @@ while [[ $# -ge 1 ]]; do
   esac
 done
 
-[ ! $GENERATE_CONFIGSCRIPT -eq 0 ] && generate_configscript && exit 0
-
-if [ ! -r "$CONFIGSCRIPT" ]; then
+if [ -r "$CONFIGSCRIPT" ]; then
+  source $CONFIGSCRIPT
+elif [ $GENERATE_CONFIGSCRIPT -eq 0 ]; then
   echoerr "Cannot access configuration script file $CONFIGSCRIPT"
   show_help
   exit 1
 fi
 
+[ ! $GENERATE_CONFIGSCRIPT -eq 0 ] && generate_configscript && exit 0
+
 [ -x $EXECUTABLE ] || echoerr "Configuration script must define EXECUTABLE"
 
 mkdir -p ${OUTPUT_DIRECTORY} || exit 1
 mkdir -p ${PID_DIR} || exit 1
+
+for p in $PROGRESS_TYPE; do
+  progress "$p"
+done
 
 echo "Main script PID is $$"
 
