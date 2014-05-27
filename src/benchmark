@@ -149,7 +149,7 @@ OPTIONAL_VARIABLE="OUTPUT_DIRECTORY PID_DIR NB_TRY_FOR_EACH_ARG NB_THREAD PROGRE
 # Default values
 ######################
 OUTPUT_DIRECTORY="./output/"
-PID_DIR="/var/run/$MY_NAME"
+PID_DIR="/var/run/lock/$MY_NAME"
 NB_TRY_FOR_EACH_ARG=1
 TIMEOUT="" # seconds
 NB_THREAD=$(expr `cat /proc/cpuinfo | grep processor | wc -l` - 1)
